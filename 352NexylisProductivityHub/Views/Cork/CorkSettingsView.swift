@@ -12,39 +12,39 @@ struct CorkSettingsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     settingsToggle(
                         title: "Sound",
-                        detail: "Play a cue when a pulse cycle ends.",
+                        detail: "Play a cue when a focus cycle ends.",
                         isOn: Binding(get: { store.soundEnabled }, set: { store.setSoundEnabled($0) }),
                         tilt: -1.4
                     )
                     settingsToggle(
                         title: "Haptic",
-                        detail: "Vibrate on cycle end and habit checks.",
+                        detail: "Vibrate on cycle end and cadence checks.",
                         isOn: Binding(get: { store.hapticEnabled }, set: { store.setHapticEnabled($0) }),
                         tilt: 1.2
                     )
                     settingsToggle(
-                        title: "Auto-continue Pulse",
+                        title: "Auto-continue Focus",
                         detail: "Start the next focus or break automatically.",
                         isOn: Binding(get: { store.autoContinuePulse }, set: { store.setAutoContinuePulse($0) }),
                         tilt: 0
                     )
-                    settingsCard(title: "Rate Us", detail: "Leave a mark if the board helps.", tilt: -1.8) {
+                    settingsCard(title: "Rate Us", detail: "Leave a mark if Signal Desk helps.", tilt: -1.8) {
                         AppLinks.rateApp()
                     }
-                    settingsCard(title: "Privacy", detail: "Read how board data stays local.", tilt: 0) {
+                    settingsCard(title: "Privacy", detail: "How desk data stays on-device.", tilt: 0) {
                         open(AppLinks.privacy.rawValue)
                     }
-                    settingsCard(title: "Terms", detail: "The ground rules for this board.", tilt: 1.6) {
+                    settingsCard(title: "Terms", detail: "Ground rules for this desk.", tilt: 1.6) {
                         open(AppLinks.terms.rawValue)
                     }
-                    settingsCard(title: "Reset All Data", detail: "Clears pins, habits, and pulse history.", tilt: 0, destructive: true) {
+                    settingsCard(title: "Reset All Data", detail: "Clears signals, cadence, seals, and tags.", tilt: 0, destructive: true) {
                         confirmReset = true
                     }
                 }
                 .padding(18)
             }
             .studioBackdrop()
-            .navigationTitle("Board")
+            .navigationTitle("Signal Desk")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -53,7 +53,7 @@ struct CorkSettingsView: View {
                 }
             }
             .confirmationDialog(
-                "Reset all board data?",
+                "Reset all desk data?",
                 isPresented: $confirmReset,
                 titleVisibility: .visible
             ) {
@@ -63,7 +63,7 @@ struct CorkSettingsView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This clears pins, habits, interruptions, and focus history.")
+                Text("This clears signals, cadence, interruptions, seals, and focus history.")
             }
         }
     }
@@ -78,7 +78,7 @@ struct CorkSettingsView: View {
                             .foregroundColor(destructive ? Palette.accent : Color.white)
                         Text(detail)
                             .font(.footnote)
-                            .foregroundColor(Color.white.opacity(0.75))
+                            .foregroundColor(Palette.inkMuted)
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
@@ -99,7 +99,7 @@ struct CorkSettingsView: View {
                         .foregroundColor(Color.white)
                     Text(detail)
                         .font(.footnote)
-                        .foregroundColor(Color.white.opacity(0.75))
+                        .foregroundColor(Palette.inkMuted)
                 }
             }
             .tint(Palette.primary)

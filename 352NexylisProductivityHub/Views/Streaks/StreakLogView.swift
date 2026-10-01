@@ -17,15 +17,15 @@ struct StreakLogView: View {
                 } label: {
                     HStack {
                         Image(systemName: "plus")
-                        Text("Add habit")
+                        Text("Add cadence")
                             .font(.system(.subheadline, design: .rounded).weight(.semibold))
                         Spacer()
-                        PushPin(size: 12)
+                        SignalMark(size: 12)
                     }
-                    .foregroundColor(Color.white)
+                    .foregroundColor(Palette.ink)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(Palette.surface.opacity(0.72))
+                    .background(DepthFill(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
 
@@ -44,7 +44,7 @@ struct StreakLogView: View {
             HabitEditorSheet(existing: editorHabit)
                 .environmentObject(store)
         }
-        .confirmationDialog("Remove this habit?", isPresented: Binding(
+        .confirmationDialog("Remove this cadence?", isPresented: Binding(
             get: { deleteTarget != nil },
             set: { if !$0 { deleteTarget = nil } }
         ), titleVisibility: .visible) {
@@ -61,17 +61,17 @@ struct StreakLogView: View {
     }
 
     private var emptyHabits: some View {
-        StickyNote(tilt: 2) {
+        StickyNote {
             VStack(spacing: 10) {
-                Image(systemName: "plus.circle.fill")
+                Image(systemName: "metronome.fill")
                     .font(.system(size: 34))
                     .foregroundColor(Palette.accent)
-                Text("No Habits Yet")
+                Text("No cadence yet")
                     .font(.system(.title3, design: .rounded).weight(.bold))
                     .foregroundColor(Color.white)
-                Text("Pin a daily streak to keep the board honest.")
+                Text("Lock repeating rhythms that protect focus between sealed days.")
                     .font(.subheadline)
-                    .foregroundColor(Color.white.opacity(0.8))
+                    .foregroundColor(Palette.inkSoft)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
@@ -85,7 +85,7 @@ struct StreakLogView: View {
         let doneToday = habit.lastCompletedDay == today
         let marks = store.markedDays(for: habit)
 
-        return StickyNote(tilt: index == 0 ? -1.6 : 0, compact: true) {
+        return StickyNote(compact: true) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -98,12 +98,12 @@ struct StreakLogView: View {
                                 .foregroundColor(Palette.accent)
                             Text(habit.streak == 1 ? "day" : "days")
                                 .font(.caption)
-                                .foregroundColor(Color.white.opacity(0.75))
+                                .foregroundColor(Palette.inkMuted)
                         }
                         if let reminder = habit.reminderTime {
                             Text(timeLabel(reminder))
                                 .font(.system(.caption, design: .monospaced).weight(.semibold))
-                                .foregroundColor(Color.white.opacity(0.8))
+                                .foregroundColor(Palette.inkSoft)
                         }
                     }
                     Spacer()
@@ -112,7 +112,7 @@ struct StreakLogView: View {
                     } label: {
                         Image(systemName: doneToday ? "checkmark.circle.fill" : "circle")
                             .font(.title2)
-                            .foregroundColor(doneToday ? Palette.accent : Color.white.opacity(0.7))
+                            .foregroundColor(doneToday ? Palette.accent : Palette.inkMuted)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(doneToday ? "Undo today" : "Complete today")
@@ -167,7 +167,7 @@ struct StreakLogView: View {
                 VStack(spacing: 5) {
                     Text(day.letter)
                         .font(.system(.caption2, design: .monospaced).weight(.bold))
-                        .foregroundColor(Color.white.opacity(0.75))
+                        .foregroundColor(Palette.inkMuted)
                     ZStack {
                         if skipped == day.stamp {
                             Circle()
@@ -178,7 +178,7 @@ struct StreakLogView: View {
                                 .fill(marks.contains(day.stamp) ? Palette.primary : Palette.background.opacity(0.35))
                                 .frame(width: 22, height: 22)
                             if marks.contains(day.stamp) {
-                                PushPin(size: 8)
+                                SignalMark(size: 8)
                             }
                         }
                     }

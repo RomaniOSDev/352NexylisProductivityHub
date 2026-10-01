@@ -51,7 +51,7 @@ struct PulseTimerView: View {
     }
 
     private var sliders: some View {
-        StickyNote(tilt: -1.5) {
+        StickyNote {
             VStack(alignment: .leading, spacing: 12) {
                 labeledSlider(
                     title: "Focus",
@@ -71,15 +71,15 @@ struct PulseTimerView: View {
     }
 
     private var focusPicker: some View {
-        StickyNote(tilt: 1.1, compact: true) {
+        StickyNote(compact: true) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("FOCUS PIN")
+                Text("LOCKED SIGNAL")
                     .font(.caption.weight(.bold))
                     .foregroundColor(Palette.accent)
                 if store.pendingPins.isEmpty {
-                    Text("No pending pins to lock onto.")
+                    Text("No open dayline signals to lock.")
                         .font(.subheadline)
-                        .foregroundColor(Color.white.opacity(0.8))
+                        .foregroundColor(Palette.inkSoft)
                 } else {
                     if let focused = store.focusedPin {
                         Text(focused.title)
@@ -107,13 +107,13 @@ struct PulseTimerView: View {
                     .font(.system(.subheadline, design: .rounded).weight(.semibold))
                 Text("Start the next focus or break when a cycle ends.")
                     .font(.caption)
-                    .foregroundColor(Color.white.opacity(0.7))
+                    .foregroundColor(Palette.inkMuted)
             }
         }
         .tint(Palette.primary)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Palette.surface.opacity(0.72))
+        .background(DepthFill(cornerRadius: 14))
     }
 
     private func labeledSlider(title: String, seconds: Int, range: ClosedRange<Double>, onChange: @escaping (Int) -> Void) -> some View {
@@ -140,12 +140,12 @@ struct PulseTimerView: View {
     }
 
     private var emptyPulse: some View {
-        StickyNote(tilt: 2) {
+        StickyNote {
             VStack(spacing: 10) {
-                Image(systemName: "clock.arrow.circlepath")
+                Image(systemName: "dot.radiowaves.left.and.right")
                     .font(.system(size: 34))
                     .foregroundColor(Palette.accent)
-                Text("Set your focus intervals using the slider above to get started")
+                Text("Set focus length, lock one dayline signal, then run a protected cycle.")
                     .font(.system(.body, design: .rounded))
                     .foregroundColor(Color.white)
                     .multilineTextAlignment(.center)
@@ -159,19 +159,14 @@ struct PulseTimerView: View {
         Button(action: store.startTimer) {
             HStack {
                 Image(systemName: "play.fill")
-                Text("Start pulse")
+                Text("Start focus")
                     .font(.system(.headline, design: .rounded))
             }
-            .foregroundColor(Color.white)
+            .foregroundColor(Palette.ink)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .background(
-                LinearGradient(
-                    colors: [Palette.accent, Palette.primary],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
+            .background(DepthFill(cornerRadius: 14, emphasized: true))
+            .shadow(color: Palette.primary.opacity(0.35), radius: 10, y: 4)
         }
         .buttonStyle(.plain)
     }
@@ -187,7 +182,7 @@ struct PulseTimerView: View {
                 .foregroundColor(Color.white)
             Text("sessions")
                 .font(.caption)
-                .foregroundColor(Color.white.opacity(0.75))
+                .foregroundColor(Palette.inkMuted)
         }
         .padding(.horizontal, 4)
     }
@@ -210,8 +205,10 @@ struct PulseTimerView: View {
             VStack(spacing: 6) {
                 Text(clockLabel(store.remainingSec))
                     .font(.system(size: 36, weight: .bold, design: .monospaced))
-                    .foregroundColor(Color.white)
-                PushPin(size: 14)
+                    .foregroundColor(Palette.ink)
+                    .shadow(color: Color.black.opacity(0.55), radius: 4, y: 2)
+                    .shadow(color: Palette.primary.opacity(0.35), radius: 8, y: 1)
+                SignalMark(size: 14)
             }
         }
         .frame(width: 210, height: 210)
@@ -232,57 +229,58 @@ struct PulseTimerView: View {
                 Text(store.isTimerRunning ? "Pause" : (store.remainingSec == (store.isOnBreak ? store.breakDurationSec : store.focusDurationSec) ? "Start" : "Resume"))
                     .font(.system(.headline, design: .rounded))
             }
-            .foregroundColor(Color.white)
+            .foregroundColor(Palette.ink)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .background(
-                LinearGradient(
-                    colors: [Palette.accent, Palette.primary],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
+            .background(DepthFill(cornerRadius: 14, emphasized: true))
+            .shadow(color: Palette.primary.opacity(0.35), radius: 10, y: 4)
         }
         .buttonStyle(.plain)
     }
 
     private var interruptionStrip: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("INTERRUPTIONS")
+            Text("INTERRUPT TAGS")
                 .font(.caption.weight(.bold))
                 .foregroundColor(Palette.accent)
             ForEach(store.interruptions.prefix(4)) { item in
                 HStack(alignment: .top, spacing: 8) {
-                    PushPin(size: 9)
+                    Image(systemName: item.kind.symbol)
+                        .font(.caption)
+                        .foregroundColor(Palette.accent)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.note)
                             .font(.subheadline)
                             .foregroundColor(Color.white)
-                        Text(monoTime(item.at))
+                        Text("\(item.kind.label) · \(monoTime(item.at))")
                             .font(.system(.caption2, design: .monospaced))
-                            .foregroundColor(Color.white.opacity(0.7))
+                            .foregroundColor(Palette.inkMuted)
                     }
                 }
             }
         }
         .padding(12)
-        .background(Palette.surface.opacity(0.55))
+        .background(DepthFill(cornerRadius: 14))
     }
 
     private var resumeSheet: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
-                StickyNote(tilt: -1.2) {
+                StickyNote {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Session complete. Add a resume note?")
+                        Text("Cycle ended. Capture a resume note?")
                             .font(.system(.headline, design: .rounded))
                             .foregroundColor(Color.white)
-                        TextField("Resumed after interruption", text: $resumeNote)
+                        TextField("What shifted attention?", text: $resumeNote)
                             .foregroundColor(Color.white)
                             .submitLabel(.done)
                             .onSubmit { BoardKeyboard.dismiss() }
-                        Button("Pin this as a task") {
-                            store.pinFromInterruption(note: resumeNote, relatedTaskID: store.focusedPinID)
+                        Button("Queue as follow-up signal") {
+                            store.pinFromInterruption(
+                                note: resumeNote,
+                                relatedTaskID: store.focusedPinID,
+                                kind: .contextSwitch
+                            )
                             showResumeSheet = false
                         }
                         .font(.caption.weight(.bold))
@@ -303,7 +301,7 @@ struct PulseTimerView: View {
                     .foregroundColor(Palette.accent)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Pin note") {
+                    Button("Save") {
                         store.appendResumeNote(resumeNote)
                         showResumeSheet = false
                     }
@@ -347,8 +345,7 @@ private struct FlexiblePinChips: View {
                         .padding(.vertical, 6)
                         .frame(maxWidth: .infinity)
                         .background(
-                            Capsule()
-                                .fill(selected == pin.id ? Palette.primary : Palette.background.opacity(0.4))
+                            DepthFill(cornerRadius: 10, emphasized: selected == pin.id)
                         )
                 }
                 .buttonStyle(.plain)

@@ -10,8 +10,10 @@ struct PinBoardView: View {
     @State private var showOffer = false
     @State private var showInterruptSheet = false
     @State private var interruptNote = ""
+    @State private var interruptKind: InterruptKind = .other
     @State private var deleteTarget: WorkPin?
     @State private var showShutdown = false
+    @State private var showBrief = false
 
     private var visibleTasks: [WorkPin] {
         store.tasks.filter { pin in
@@ -25,6 +27,13 @@ struct PinBoardView: View {
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 12, trailing: 16))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
+
+            if store.shouldShowMorningBrief || showBrief {
+                morningBriefCard
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 10, trailing: 16))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
 
             filterRow
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
@@ -60,6 +69,11 @@ struct PinBoardView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
+        .onAppear {
+            if store.shouldShowMorningBrief {
+                showBrief = true
+            }
+        }
         .sheet(isPresented: $showEditor) {
             PinEditorSheet(existing: editorPin)
                 .environmentObject(store)
@@ -71,13 +85,14 @@ struct PinBoardView: View {
             ShutdownSheet()
                 .environmentObject(store)
         }
-        .alert("Pin completed", isPresented: $showOffer, presenting: offerPin) { pin in
-            Button("Log interruption pattern") {
+        .alert("Signal captured", isPresented: $showOffer, presenting: offerPin) { pin in
+            Button("Tag interruption") {
                 interruptNote = ""
+                interruptKind = .other
                 showInterruptSheet = true
             }
             if let title = habitTitle(from: pendingOffer) {
-                Button("Pin habit: \(title)") {
+                Button("Add cadence: \(title)") {
                     store.pinSuggestedHabit(title)
                 }
             }
@@ -85,7 +100,7 @@ struct PinBoardView: View {
         } message: { pin in
             Text(offerMessage(for: pin))
         }
-        .confirmationDialog("Remove this pin?", isPresented: Binding(
+        .confirmationDialog("Remove this signal?", isPresented: Binding(
             get: { deleteTarget != nil },
             set: { if !$0 { deleteTarget = nil } }
         ), titleVisibility: .visible) {
@@ -101,17 +116,69 @@ struct PinBoardView: View {
         }
     }
 
+    private var morningBriefCard: some View {
+        StickyNote(compact: true) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("MORNING BRIEF")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(Palette.accent)
+                    Spacer()
+                    Text("Quiet \(store.quietWindow.label)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundColor(Palette.inkMuted)
+                }
+
+                Text("Yesterday’s seal carried these into today.")
+                    .font(.subheadline)
+                    .foregroundColor(Palette.inkSoft)
+
+                ForEach(store.carriedBriefPins.prefix(3)) { pin in
+                    HStack(spacing: 10) {
+                        SignalMark(size: 12)
+                        Text(pin.title)
+                            .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                            .foregroundColor(Color.white)
+                            .lineLimit(1)
+                        Spacer()
+                        Button("Focus") {
+                            store.focusPin(pin.id)
+                            store.dismissMorningBrief()
+                            showBrief = false
+                            NotificationCenter.default.post(name: BoardNote.openPulse, object: nil)
+                        }
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(Palette.accent)
+                    }
+                }
+
+                if let residue = store.lastShutdown?.residueNote, !residue.isEmpty {
+                    Text("Residue: \(residue)")
+                        .font(.caption)
+                        .foregroundColor(Palette.inkMuted)
+                }
+
+                Button("Start day") {
+                    store.dismissMorningBrief()
+                    showBrief = false
+                }
+                .font(.caption.weight(.bold))
+                .foregroundColor(Palette.accent)
+            }
+        }
+    }
+
     private var filterRow: some View {
         HStack(spacing: 8) {
-            chip("Pending", active: !showCompleted) { showCompleted = false }
-            chip("Completed", active: showCompleted) { showCompleted = true }
+            chip("Open", active: !showCompleted) { showCompleted = false }
+            chip("Done", active: showCompleted) { showCompleted = true }
             Spacer()
             Text("\(store.completedTaskCount)")
                 .font(.system(.caption, design: .monospaced).weight(.bold))
                 .foregroundColor(Palette.accent)
-            Text("done")
+            Text("cleared")
                 .font(.caption)
-                .foregroundColor(Color.white.opacity(0.75))
+                .foregroundColor(Palette.inkMuted)
         }
     }
 
@@ -124,27 +191,27 @@ struct PinBoardView: View {
                 HStack {
                     Image(systemName: "plus")
                         .font(.headline)
-                    Text("Add pin")
+                    Text("Add signal")
                         .font(.system(.subheadline, design: .rounded).weight(.semibold))
                     Spacer()
-                    PushPin(size: 12)
+                    SignalMark(size: 12)
                 }
-                .foregroundColor(Color.white)
+                .foregroundColor(Palette.ink)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Palette.surface.opacity(0.72))
+                .background(DepthFill(cornerRadius: 14))
             }
             .buttonStyle(.plain)
 
             Button {
                 showShutdown = true
             } label: {
-                Text("End day")
+                Text(store.isDaySealed ? "Sealed" : "Seal day")
                     .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                    .foregroundColor(Color.white)
+                    .foregroundColor(Palette.ink)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
-                    .background(Palette.primary.opacity(0.85))
+                    .background(DepthFill(cornerRadius: 14, emphasized: !store.isDaySealed))
             }
             .buttonStyle(.plain)
         }
@@ -159,41 +226,41 @@ struct PinBoardView: View {
         let overdue = store.overduePins
         let dueToday = store.dueTodayPins
         let habits = store.openHabits
-        StickyNote(tilt: -1.2, compact: true) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("TODAY")
-                        .font(.caption.weight(.bold))
-                        .foregroundColor(Palette.accent)
-                    if !overdue.isEmpty {
-                        todayGroup(title: "Overdue", pins: Array(overdue.prefix(3)))
-                    }
-                    if !dueToday.isEmpty {
-                        todayGroup(title: "Due later", pins: Array(dueToday.prefix(3)))
-                    }
-                    if !habits.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Habits open")
-                                .font(.caption2.weight(.bold))
-                                .foregroundColor(Color.white.opacity(0.7))
-                            ForEach(habits.prefix(3)) { habit in
-                                Button {
-                                    store.toggleHabitToday(habit)
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "circle")
-                                            .font(.caption)
-                                            .foregroundColor(Palette.accent)
-                                        Text(habit.title)
-                                            .font(.subheadline)
-                                            .foregroundColor(Color.white)
-                                        Spacer()
-                                    }
+        StickyNote(compact: true) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("LIVE RAIL")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(Palette.accent)
+                if !overdue.isEmpty {
+                    todayGroup(title: "Overdue", pins: Array(overdue.prefix(3)))
+                }
+                if !dueToday.isEmpty {
+                    todayGroup(title: "Due later", pins: Array(dueToday.prefix(3)))
+                }
+                if !habits.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Cadence open")
+                            .font(.caption2.weight(.bold))
+                            .foregroundColor(Palette.inkMuted)
+                        ForEach(habits.prefix(3)) { habit in
+                            Button {
+                                store.toggleHabitToday(habit)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "circle")
+                                        .font(.caption)
+                                        .foregroundColor(Palette.accent)
+                                    Text(habit.title)
+                                        .font(.subheadline)
+                                        .foregroundColor(Color.white)
+                                    Spacer()
                                 }
-                                .buttonStyle(.plain)
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
+            }
         }
     }
 
@@ -201,10 +268,10 @@ struct PinBoardView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.caption2.weight(.bold))
-                .foregroundColor(Color.white.opacity(0.7))
+                .foregroundColor(Palette.inkMuted)
             ForEach(pins) { pin in
                 HStack(spacing: 8) {
-                    PushPin(size: 8)
+                    SignalMark(size: 8)
                     Text(pin.title)
                         .font(.subheadline)
                         .foregroundColor(Color.white)
@@ -224,17 +291,17 @@ struct PinBoardView: View {
     }
 
     private var emptyBoard: some View {
-        StickyNote(tilt: -2) {
+        StickyNote {
             VStack(spacing: 10) {
-                Image(systemName: "pencil.tip")
+                Image(systemName: "waveform.path.ecg")
                     .font(.system(size: 34))
                     .foregroundColor(Palette.accent)
-                Text("No Tasks Yet")
+                Text("Dayline is clear")
                     .font(.system(.title3, design: .rounded).weight(.bold))
                     .foregroundColor(Color.white)
-                Text("Stick a pin on the board to start tracking work.")
+                Text("Add the work signals you want to protect today, then seal the day when you shut down.")
                     .font(.subheadline)
-                    .foregroundColor(Color.white.opacity(0.8))
+                    .foregroundColor(Palette.inkSoft)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
@@ -243,8 +310,8 @@ struct PinBoardView: View {
     }
 
     private var filterEmpty: some View {
-        StickyNote(tilt: 1.5) {
-            Text(showCompleted ? "No completed pins yet." : "No pending pins.")
+        StickyNote {
+            Text(showCompleted ? "No cleared signals yet." : "No open signals.")
                 .font(.system(.body, design: .rounded))
                 .foregroundColor(Color.white)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -265,8 +332,8 @@ struct PinBoardView: View {
             .sorted { $0.dueDate < $1.dueDate }
         if !group.isEmpty {
             priorityHeader(priority)
-            ForEach(Array(group.enumerated()), id: \.element.id) { index, pin in
-                pinRow(pin, tilt: shouldTilt(priority: priority, index: index) ? -1.8 : 0)
+            ForEach(group) { pin in
+                pinRow(pin)
                     .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -296,7 +363,7 @@ struct PinBoardView: View {
 
     private func priorityHeader(_ priority: PinPriority) -> some View {
         HStack(spacing: 8) {
-            PushPin(size: 10)
+            SignalMark(size: 10)
             Text(priority.label.uppercased())
                 .font(.caption.weight(.bold))
                 .foregroundColor(Palette.accent)
@@ -306,8 +373,8 @@ struct PinBoardView: View {
         .listRowSeparator(.hidden)
     }
 
-    private func pinRow(_ pin: WorkPin, tilt: Double) -> some View {
-        StickyNote(tilt: tilt, compact: true) {
+    private func pinRow(_ pin: WorkPin) -> some View {
+        StickyNote(compact: true) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -334,7 +401,7 @@ struct PinBoardView: View {
 
                 Text(dueLabel(pin.dueDate))
                     .font(.system(.caption, design: .monospaced).weight(.semibold))
-                    .foregroundColor(pin.isOverdue ? Palette.accent : Color.white.opacity(0.85))
+                    .foregroundColor(pin.isOverdue ? Palette.accent : Palette.inkSoft)
 
                 HStack {
                     Button("Edit") {
@@ -342,7 +409,7 @@ struct PinBoardView: View {
                         showEditor = true
                     }
                     if pin.completedAt == nil {
-                        Button("Pulse") {
+                        Button("Focus") {
                             store.focusPin(pin.id)
                             NotificationCenter.default.post(name: BoardNote.openPulse, object: nil)
                         }
@@ -362,19 +429,12 @@ struct PinBoardView: View {
         Button(action: action) {
             Text(title)
                 .font(.caption.weight(.bold))
-                .foregroundColor(Color.white)
+                .foregroundColor(Palette.ink)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(
-                    Capsule()
-                        .fill(active ? Palette.primary : Palette.surface.opacity(0.7))
-                )
+                .background(DepthFill(cornerRadius: 10, emphasized: active))
         }
         .buttonStyle(.plain)
-    }
-
-    private func shouldTilt(priority: PinPriority, index: Int) -> Bool {
-        priority == .high && index == 0 && !showCompleted
     }
 
     private func finish(_ pin: WorkPin) {
@@ -397,9 +457,9 @@ struct PinBoardView: View {
 
     private func offerMessage(for pin: WorkPin) -> String {
         if let title = habitTitle(from: pendingOffer) {
-            return "\(pin.category.rawValue) keeps coming back. Log an interruption pattern, or pin a habit: \(title)."
+            return "\(pin.category.rawValue) keeps looping. Tag the interruption, or lock a cadence: \(title)."
         }
-        return "Want to log an interruption pattern from this pin?"
+        return "Tag what pulled focus off this signal?"
     }
 
     private func dueLabel(_ date: Date) -> String {
@@ -411,17 +471,44 @@ struct PinBoardView: View {
     private var interruptionSheet: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
-                StickyNote(tilt: 1.4) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("What keeps pulling you off this pin?")
+                StickyNote {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("What pulled the signal?")
                             .font(.system(.headline, design: .rounded))
                             .foregroundColor(Color.white)
-                        TextField("Pattern note", text: $interruptNote)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(InterruptKind.allCases) { kind in
+                                    Button {
+                                        interruptKind = kind
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: kind.symbol)
+                                            Text(kind.label)
+                                        }
+                                        .font(.caption.weight(.bold))
+                                        .foregroundColor(Palette.ink)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 8)
+                                        .background(DepthFill(cornerRadius: 10, emphasized: interruptKind == kind))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+
+                        TextField("Optional note", text: $interruptNote)
                             .foregroundColor(Color.white)
                             .submitLabel(.done)
                             .onSubmit { BoardKeyboard.dismiss() }
-                        Button("Log and pin as a task") {
-                            store.pinFromInterruption(note: interruptNote, relatedTaskID: offerPin?.id)
+
+                        Button("Log and queue follow-up") {
+                            store.pinFromInterruption(
+                                note: interruptNote,
+                                relatedTaskID: offerPin?.id,
+                                kind: interruptKind
+                            )
                             showInterruptSheet = false
                         }
                         .font(.caption.weight(.bold))
@@ -432,7 +519,7 @@ struct PinBoardView: View {
             }
             .padding(18)
             .studioBackdrop()
-            .navigationTitle("Interruption")
+            .navigationTitle("Interruption tag")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -441,7 +528,11 @@ struct PinBoardView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Log") {
-                        store.logInterruption(note: interruptNote, relatedTaskID: offerPin?.id)
+                        store.logInterruption(
+                            note: interruptNote,
+                            relatedTaskID: offerPin?.id,
+                            kind: interruptKind
+                        )
                         showInterruptSheet = false
                     }
                     .fontWeight(.bold)

@@ -4,68 +4,72 @@ struct CorkHeader: View {
     @Binding var page: Int
     var onSettings: () -> Void
 
-    private let titles = ["Pins", "Pulse", "Streaks", "Stats"]
+    private let titles = ["Dayline", "Focus", "Cadence", "Radar"]
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(titles[safe: page] ?? "Pins")
-                    .font(.system(.title2, design: .rounded).weight(.bold))
-                    .foregroundColor(Color.white)
+        HStack(spacing: 10) {
+            Text(titles[safe: page] ?? "Dayline")
+                .font(.system(.headline, design: .rounded).weight(.bold))
+                .foregroundColor(Palette.ink)
+                .shadow(color: Color.black.opacity(0.45), radius: 2, y: 1)
+                .lineLimit(1)
 
-                CorkDotRow(count: titles.count, current: page) { index in
-                    page = index
-                }
+            Spacer(minLength: 6)
+
+            SignalTabRow(count: titles.count, current: page) { index in
+                page = index
             }
 
-            Spacer(minLength: 8)
-
             Button(action: onSettings) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Palette.accent, Palette.primary],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Color.white)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Palette.actionGradient)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
                             )
-                        )
-                        .frame(width: 44, height: 44)
-                        .shadow(color: Palette.primary.opacity(0.45), radius: 4, y: 2)
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(Color.white)
-                        .rotationEffect(.degrees(38))
-                }
+                            .shadow(color: Palette.primary.opacity(0.4), radius: 4, y: 2)
+                    )
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+        .padding(.bottom, 6)
     }
 }
 
-struct CorkDotRow: View {
+struct SignalTabRow: View {
     let count: Int
     let current: Int
     var onSelect: (Int) -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 5) {
             ForEach(0..<count, id: \.self) { index in
                 Button {
                     onSelect(index)
                 } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Palette.surface.opacity(index == current ? 0.35 : 0.55))
-                            .frame(width: index == current ? 18 : 10, height: index == current ? 18 : 10)
-                        if index == current {
-                            PushPin(size: 12)
-                        }
-                    }
+                    Capsule()
+                        .fill(
+                            index == current
+                            ? Palette.actionGradient
+                            : LinearGradient(
+                                colors: [Color.white.opacity(0.28), Color.black.opacity(0.25)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: index == current ? 18 : 7, height: 6)
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.white.opacity(index == current ? 0.35 : 0.15), lineWidth: 0.8)
+                        )
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(dotLabel(index))
@@ -75,14 +79,17 @@ struct CorkDotRow: View {
 
     private func dotLabel(_ index: Int) -> String {
         switch index {
-        case 0: return "Pins"
-        case 1: return "Pulse"
-        case 2: return "Streaks"
-        case 3: return "Stats"
+        case 0: return "Dayline"
+        case 1: return "Focus"
+        case 2: return "Cadence"
+        case 3: return "Radar"
         default: return "Page \(index + 1)"
         }
     }
 }
+
+/// Legacy name used by older call sites.
+typealias CorkDotRow = SignalTabRow
 
 private extension Array {
     subscript(safe index: Int) -> Element? {

@@ -5,15 +5,37 @@ struct ScreenBackground: ViewModifier {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background {
-                Color("AppBackground")
-                    .overlay {
-                        Image("BgDesk")
-                            .resizable()
-                            .scaledToFill()
-                            .opacity(0.22)
-                    }
-                    .clipped()
-                    .ignoresSafeArea()
+                ZStack {
+                    Color("AppBackground")
+
+                    Image("BgDesk")
+                        .resizable()
+                        .scaledToFill()
+                        .opacity(0.22)
+                        .blur(radius: 0.4)
+
+                    LinearGradient(
+                        colors: [
+                            Palette.background.opacity(0.35),
+                            Palette.background.opacity(0.55),
+                            Color.black.opacity(0.42)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+
+                    RadialGradient(
+                        colors: [
+                            Color.clear,
+                            Color.black.opacity(0.28)
+                        ],
+                        center: .center,
+                        startRadius: 80,
+                        endRadius: 520
+                    )
+                }
+                .clipped()
+                .ignoresSafeArea()
             }
     }
 }

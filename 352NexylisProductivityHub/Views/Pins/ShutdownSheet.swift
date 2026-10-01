@@ -6,6 +6,7 @@ struct ShutdownSheet: View {
 
     @State private var selected: Set<UUID> = []
     @State private var interruptNote = ""
+    @State private var residueKind: InterruptKind = .fatigue
 
     private var pending: [WorkPin] {
         store.tasks.filter { $0.completedAt == nil }.sorted { $0.dueDate < $1.dueDate }
@@ -20,22 +21,38 @@ struct ShutdownSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    StickyNote(tilt: -1.4) {
+                    if store.isDaySealed {
+                        StickyNote(compact: true) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("DAY ALREADY SEALED")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundColor(Palette.accent)
+                                Text("You can reseal to update tomorrow’s carried three.")
+                                    .font(.subheadline)
+                                    .foregroundColor(Palette.inkSoft)
+                            }
+                        }
+                    }
+
+                    StickyNote {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("TOMORROW · PICK 3")
+                            Text("CARRY THREE")
                                 .font(.caption.weight(.bold))
                                 .foregroundColor(Palette.accent)
+                            Text("Park up to three signals for tomorrow’s Morning Brief.")
+                                .font(.footnote)
+                                .foregroundColor(Palette.inkMuted)
                             if pending.isEmpty {
-                                Text("No pending pins to carry.")
+                                Text("No open signals to carry.")
                                     .font(.subheadline)
-                                    .foregroundColor(Color.white.opacity(0.8))
+                                    .foregroundColor(Palette.inkSoft)
                             } else {
                                 ForEach(pending) { pin in
                                     Button {
                                         toggle(pin.id)
                                     } label: {
                                         HStack {
-                                            Image(systemName: selected.contains(pin.id) ? "checkmark.circle.fill" : "circle")
+                                            Image(systemName: selected.contains(pin.id) ? "checkmark.square.fill" : "square")
                                                 .foregroundColor(Palette.accent)
                                             Text(pin.title)
                                                 .foregroundColor(Color.white)
@@ -52,9 +69,9 @@ struct ShutdownSheet: View {
                     }
 
                     if !openHabits.isEmpty {
-                        StickyNote(tilt: 1.2, compact: true) {
+                        StickyNote(compact: true) {
                             VStack(alignment: .leading, spacing: 10) {
-                                Text("OPEN HABITS")
+                                Text("OPEN CADENCE")
                                     .font(.caption.weight(.bold))
                                     .foregroundColor(Palette.accent)
                                 ForEach(openHabits) { habit in
@@ -63,7 +80,7 @@ struct ShutdownSheet: View {
                                     } label: {
                                         HStack {
                                             Image(systemName: "circle")
-                                                .foregroundColor(Color.white.opacity(0.7))
+                                                .foregroundColor(Palette.inkMuted)
                                             Text(habit.title)
                                                 .foregroundColor(Color.white)
                                                 .font(.subheadline)
@@ -76,12 +93,31 @@ struct ShutdownSheet: View {
                         }
                     }
 
-                    StickyNote(tilt: 0, compact: true) {
+                    StickyNote(compact: true) {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("ONE INTERRUPTION PATTERN")
+                            Text("RESIDUE SIGNAL")
                                 .font(.caption.weight(.bold))
                                 .foregroundColor(Palette.accent)
-                            TextField("What pulled you off today?", text: $interruptNote)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(InterruptKind.allCases) { kind in
+                                        Button {
+                                            residueKind = kind
+                                        } label: {
+                                            Text(kind.label)
+                                                .font(.caption2.weight(.bold))
+                                                .foregroundColor(Palette.ink)
+                                                .padding(.horizontal, 10)
+                                                .padding(.vertical, 7)
+                                                .background(DepthFill(cornerRadius: 8, emphasized: residueKind == kind))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+
+                            TextField("What still pulled focus today?", text: $interruptNote)
                                 .foregroundColor(Color.white)
                                 .submitLabel(.done)
                                 .onSubmit { BoardKeyboard.dismiss() }
@@ -92,7 +128,7 @@ struct ShutdownSheet: View {
             }
             .studioBackdrop()
             .scrollDismissesKeyboard(.immediately)
-            .navigationTitle("End the day")
+            .navigationTitle("Seal the day")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -100,15 +136,23 @@ struct ShutdownSheet: View {
                         .foregroundColor(Palette.accent)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Park") {
+                    Button("Seal") {
                         store.finishShutdown(
                             pinIDs: Array(selected),
-                            interruptionNote: interruptNote
+                            interruptionNote: interruptNote,
+                            kind: residueKind
                         )
                         dismiss()
                     }
                     .fontWeight(.bold)
                     .foregroundColor(Palette.accent)
+                }
+            }
+            .onAppear {
+                if let carried = store.lastShutdown?.carriedPinIDs {
+                    selected = Set(carried.filter { id in
+                        store.tasks.contains(where: { $0.id == id && $0.completedAt == nil })
+                    })
                 }
             }
         }

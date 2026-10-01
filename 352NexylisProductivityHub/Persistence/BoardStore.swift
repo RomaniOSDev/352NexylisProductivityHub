@@ -23,6 +23,8 @@ final class BoardStore: ObservableObject {
     @Published var autoContinuePulse: Bool = false
     @Published var soundEnabled: Bool = true
     @Published var hapticEnabled: Bool = true
+    @Published var lastShutdown: ShutdownSeal?
+    @Published var lastBriefDay: String = ""
 
     private var cancellables = Set<AnyCancellable>()
     private var applyingExternalReset = false
@@ -46,6 +48,8 @@ final class BoardStore: ObservableObject {
         static let autoContinuePulse = "board.autoContinuePulse"
         static let soundEnabled = "board.soundEnabled"
         static let hapticEnabled = "board.hapticEnabled"
+        static let lastShutdown = "board.lastShutdown"
+        static let lastBriefDay = "board.lastBriefDay"
     }
 
     private static let allKeys: [String] = [
@@ -53,7 +57,8 @@ final class BoardStore: ObservableObject {
         Key.focusDurationSec, Key.breakDurationSec, Key.completedSessions, Key.sessionDays,
         Key.lastInterruptionTime, Key.isTimerRunning, Key.isOnBreak,
         Key.timerEndDate, Key.remainingSec, Key.hasStartedPulse,
-        Key.focusedPinID, Key.autoContinuePulse, Key.soundEnabled, Key.hapticEnabled
+        Key.focusedPinID, Key.autoContinuePulse, Key.soundEnabled, Key.hapticEnabled,
+        Key.lastShutdown, Key.lastBriefDay
     ]
 
     init() {
@@ -147,25 +152,26 @@ final class BoardStore: ObservableObject {
         HabitReminders.refresh(habits)
     }
 
-    func logInterruption(note: String, relatedTaskID: UUID?) {
+    func logInterruption(note: String, relatedTaskID: UUID?, kind: InterruptKind = .other) {
         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolved = trimmed.isEmpty ? "Interruption pattern" : trimmed
+        let resolved = trimmed.isEmpty ? kind.label : trimmed
         let entry = InterruptionLog(
             id: UUID(),
             at: Date(),
             note: resolved,
-            relatedTaskID: relatedTaskID
+            relatedTaskID: relatedTaskID,
+            kind: kind
         )
         interruptions.insert(entry, at: 0)
         lastInterruptionTime = entry.at
         persist()
     }
 
-    func pinFromInterruption(note: String, relatedTaskID: UUID?) {
+    func pinFromInterruption(note: String, relatedTaskID: UUID?, kind: InterruptKind = .other) {
         let related = relatedTaskID ?? focusedPinID
-        logInterruption(note: note, relatedTaskID: related)
+        logInterruption(note: note, relatedTaskID: related, kind: kind)
         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = trimmed.isEmpty ? "Follow up interruption" : trimmed
+        let title = trimmed.isEmpty ? "Follow up: \(kind.label)" : trimmed
         var category: PinCategory = .admin
         var priority: PinPriority = .normal
         if let related, let source = tasks.first(where: { $0.id == related }) {
@@ -227,7 +233,55 @@ final class BoardStore: ObservableObject {
         return habits.filter { $0.lastCompletedDay != today }
     }
 
-    func finishShutdown(pinIDs: [UUID], interruptionNote: String) {
+    var isDaySealed: Bool {
+        lastShutdown?.dayStamp == DayStamp.string()
+    }
+
+    var shouldShowMorningBrief: Bool {
+        guard lastBriefDay != DayStamp.string() else { return false }
+        guard let seal = lastShutdown, seal.dayStamp != DayStamp.string() else { return false }
+        return !carriedBriefPins.isEmpty || !seal.residueNote.isEmpty
+    }
+
+    var carriedBriefPins: [WorkPin] {
+        guard let seal = lastShutdown else { return [] }
+        return seal.carriedPinIDs.compactMap { id in
+            tasks.first(where: { $0.id == id && $0.completedAt == nil })
+        }
+    }
+
+    var quietWindow: QuietWindow {
+        suggestedQuietWindow()
+    }
+
+    var topInterruptKinds: [(InterruptKind, Int)] {
+        var counts: [InterruptKind: Int] = [:]
+        for entry in interruptions.prefix(40) {
+            counts[entry.kind, default: 0] += 1
+        }
+        return InterruptKind.allCases
+            .map { ($0, counts[$0] ?? 0) }
+            .filter { $0.1 > 0 }
+            .sorted { $0.1 > $1.1 }
+    }
+
+    var peakInterruptHour: Int? {
+        guard !interruptions.isEmpty else { return nil }
+        var buckets = Array(repeating: 0, count: 24)
+        for entry in interruptions.prefix(60) {
+            let hour = Calendar.current.component(.hour, from: entry.at)
+            buckets[hour] += 1
+        }
+        guard let maxValue = buckets.max(), maxValue > 0 else { return nil }
+        return buckets.firstIndex(of: maxValue)
+    }
+
+    func dismissMorningBrief() {
+        lastBriefDay = DayStamp.string()
+        persist()
+    }
+
+    func finishShutdown(pinIDs: [UUID], interruptionNote: String, kind: InterruptKind = .other) {
         let calendar = Calendar.current
         var comps = calendar.dateComponents([.year, .month, .day], from: Date())
         comps.day = (comps.day ?? 0) + 1
@@ -235,17 +289,44 @@ final class BoardStore: ObservableObject {
         comps.minute = 0
         comps.second = 0
         let due = calendar.date(from: comps) ?? Date().addingTimeInterval(86400)
-        for id in pinIDs.prefix(3) {
+        let carried = Array(pinIDs.prefix(3))
+        for id in carried {
             if let index = tasks.firstIndex(where: { $0.id == id && $0.completedAt == nil }) {
                 tasks[index].dueDate = due
             }
         }
         let trimmed = interruptionNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        lastShutdown = ShutdownSeal(
+            dayStamp: DayStamp.string(),
+            carriedPinIDs: carried,
+            residueNote: trimmed,
+            sealedAt: Date()
+        )
         if !trimmed.isEmpty {
-            logInterruption(note: trimmed, relatedTaskID: focusedPinID)
+            logInterruption(note: trimmed, relatedTaskID: focusedPinID, kind: kind)
         } else {
             persist()
         }
+    }
+
+    private func suggestedQuietWindow() -> QuietWindow {
+        var buckets = Array(repeating: 0, count: 24)
+        for entry in interruptions.prefix(80) {
+            let hour = Calendar.current.component(.hour, from: entry.at)
+            buckets[hour] += 1
+        }
+        var bestStart = 9
+        var bestScore = Int.max
+        for start in 8...16 {
+            let score = (0..<3).reduce(0) { partial, offset in
+                partial + buckets[(start + offset) % 24]
+            }
+            if score < bestScore {
+                bestScore = score
+                bestStart = start
+            }
+        }
+        return QuietWindow(startHour: bestStart, endHour: min(23, bestStart + 3))
     }
 
     // MARK: - Habits
@@ -432,7 +513,8 @@ final class BoardStore: ObservableObject {
             id: UUID(),
             at: Date(),
             note: resolved,
-            relatedTaskID: focusedPinID
+            relatedTaskID: focusedPinID,
+            kind: .contextSwitch
         )
         interruptions.insert(entry, at: 0)
         lastInterruptionTime = entry.at
@@ -476,6 +558,8 @@ final class BoardStore: ObservableObject {
         autoContinuePulse = false
         soundEnabled = true
         hapticEnabled = true
+        lastShutdown = nil
+        lastBriefDay = ""
         Self.allKeys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
         persist()
         HabitReminders.refresh(habits)
@@ -525,6 +609,8 @@ final class BoardStore: ObservableObject {
         autoContinuePulse = decode(Bool.self, key: Key.autoContinuePulse, fallback: false)
         soundEnabled = decode(Bool.self, key: Key.soundEnabled, fallback: true)
         hapticEnabled = decode(Bool.self, key: Key.hapticEnabled, fallback: true)
+        lastShutdown = decodeOptional(ShutdownSeal.self, key: Key.lastShutdown)
+        lastBriefDay = decode(String.self, key: Key.lastBriefDay, fallback: "")
     }
 
     private func persist() {
@@ -558,6 +644,12 @@ final class BoardStore: ObservableObject {
         encode(autoContinuePulse, key: Key.autoContinuePulse)
         encode(soundEnabled, key: Key.soundEnabled)
         encode(hapticEnabled, key: Key.hapticEnabled)
+        if let lastShutdown {
+            encode(lastShutdown, key: Key.lastShutdown)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Key.lastShutdown)
+        }
+        encode(lastBriefDay, key: Key.lastBriefDay)
     }
 
     private func encode<T: Encodable>(_ value: T, key: String) {

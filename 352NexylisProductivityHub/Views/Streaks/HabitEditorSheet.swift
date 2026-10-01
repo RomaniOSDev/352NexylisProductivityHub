@@ -15,12 +15,12 @@ struct HabitEditorSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    StickyNote(tilt: existing == nil ? 1.8 : 0) {
+                    StickyNote {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("TITLE")
                                 .font(.caption.weight(.bold))
                                 .foregroundColor(Palette.accent)
-                            TextField("Habit to pin", text: $title)
+                            TextField("Cadence rhythm", text: $title)
                                 .foregroundColor(Color.white)
                                 .submitLabel(.done)
                                 .onSubmit { BoardKeyboard.dismiss() }
@@ -40,7 +40,7 @@ struct HabitEditorSheet: View {
 
                             Text("A local alert is scheduled at this time if you allow notifications.")
                                 .font(.footnote)
-                                .foregroundColor(Color.white.opacity(0.7))
+                                .foregroundColor(Palette.inkMuted)
 
                             if !errorText.isEmpty {
                                 Text(errorText)

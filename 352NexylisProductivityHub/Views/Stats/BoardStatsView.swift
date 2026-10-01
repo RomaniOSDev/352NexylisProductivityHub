@@ -10,18 +10,20 @@ struct BoardStatsView: View {
             || !store.interruptions.isEmpty
             || store.completedSessions > 0
             || store.completedTaskCount > 0
+            || store.lastShutdown != nil
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 kpiRow
+                radarInsightCard
                 if hasAnyData {
+                    kindChart
+                    interruptionChart
                     completionsChart
-                    categoryChart
                     pulseChart
                     streakChart
-                    interruptionChart
                 } else {
                     emptyState
                 }
@@ -29,14 +31,16 @@ struct BoardStatsView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 28)
         }
+        .scrollContentBackground(.hidden)
+        .background(Color.clear)
     }
 
     private var kpiRow: some View {
         HStack(spacing: 8) {
-            kpiTile(value: "\(store.completedTaskCount)", label: "done")
-            kpiTile(value: "\(store.completedSessions)", label: "pulses")
-            kpiTile(value: "\(store.habits.count)", label: "habits")
-            kpiTile(value: "\(store.interruptions.count)", label: "breaks")
+            kpiTile(value: "\(store.completedTaskCount)", label: "cleared")
+            kpiTile(value: "\(store.completedSessions)", label: "focus")
+            kpiTile(value: "\(store.interruptions.count)", label: "tags")
+            kpiTile(value: store.isDaySealed ? "ON" : "OFF", label: "seal")
         }
     }
 
@@ -44,28 +48,74 @@ struct BoardStatsView: View {
         VStack(spacing: 4) {
             Text(value)
                 .font(.system(.title3, design: .monospaced).weight(.bold))
-                .foregroundColor(Color.white)
+                .foregroundColor(Palette.ink)
+                .shadow(color: Color.black.opacity(0.4), radius: 2, y: 1)
             Text(label.uppercased())
                 .font(.system(size: 9, weight: .bold))
                 .foregroundColor(Palette.accent)
+                .shadow(color: Color.black.opacity(0.35), radius: 1, y: 1)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(Palette.surface.opacity(0.72))
+        .padding(.vertical, 14)
+        .background(DepthFill(cornerRadius: 14))
+    }
+
+    private var radarInsightCard: some View {
+        StickyNote(compact: true) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("INTERRUPTION RADAR")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(Palette.accent)
+
+                Text("Suggested quiet window: \(store.quietWindow.label)")
+                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                    .foregroundColor(Color.white)
+
+                if let peak = store.peakInterruptHour {
+                    Text(String(format: "Peak interference around %02d:00", peak))
+                        .font(.footnote)
+                        .foregroundColor(Palette.inkSoft)
+                } else {
+                    Text("Tag interruptions to map your noisiest hours.")
+                        .font(.footnote)
+                        .foregroundColor(Palette.inkSoft)
+                }
+
+                if store.topInterruptKinds.isEmpty {
+                    Text("No tagged pulls yet.")
+                        .font(.caption)
+                        .foregroundColor(Palette.inkMuted)
+                } else {
+                    ForEach(store.topInterruptKinds.prefix(3), id: \.0) { kind, count in
+                        HStack {
+                            Image(systemName: kind.symbol)
+                                .foregroundColor(Palette.accent)
+                            Text(kind.label)
+                                .foregroundColor(Color.white)
+                            Spacer()
+                            Text("\(count)")
+                                .font(.system(.caption, design: .monospaced).weight(.bold))
+                                .foregroundColor(Palette.accent)
+                        }
+                        .font(.subheadline)
+                    }
+                }
+            }
+        }
     }
 
     private var emptyState: some View {
-        StickyNote(tilt: -1.8) {
+        StickyNote {
             VStack(spacing: 10) {
-                Image(systemName: "chart.bar.fill")
+                Image(systemName: "antenna.radiowaves.left.and.right")
                     .font(.system(size: 34))
                     .foregroundColor(Palette.accent)
-                Text("No Stats Yet")
+                Text("Radar is quiet")
                     .font(.system(.title3, design: .rounded).weight(.bold))
                     .foregroundColor(Color.white)
-                Text("Complete pins, run a pulse, or mark a habit to fill the board.")
+                Text("Clear signals, run focus, tag interruptions, and seal a day to fill the radar.")
                     .font(.subheadline)
-                    .foregroundColor(Color.white.opacity(0.8))
+                    .foregroundColor(Palette.inkSoft)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
@@ -74,9 +124,39 @@ struct BoardStatsView: View {
         .padding(.top, 8)
     }
 
+    private var kindChart: some View {
+        let points = kindPoints
+        return chartCard(title: "PULL REASONS", isEmpty: points.isEmpty, emptyText: "Tag an interruption to see reason mix.") {
+            Chart(points) { point in
+                BarMark(
+                    x: .value("Count", point.count),
+                    y: .value("Kind", point.label)
+                )
+                .foregroundStyle(Palette.accent)
+                .cornerRadius(3)
+            }
+            .chartXAxis {
+                AxisMarks { _ in
+                    AxisValueLabel()
+                        .foregroundStyle(Palette.inkMuted)
+                        .font(.caption2.weight(.semibold))
+                }
+            }
+            .chartYAxis {
+                AxisMarks { _ in
+                    AxisValueLabel()
+                        .foregroundStyle(Palette.inkSoft)
+                        .font(.caption.weight(.semibold))
+                }
+            }
+            .chartXScale(domain: 0...yMax(points.map(\.count)))
+            .frame(height: CGFloat(max(120, points.count * 36)))
+        }
+    }
+
     private var completionsChart: some View {
         let points = completionPoints
-        return chartCard(title: "PINS COMPLETED · 7 DAYS", tilt: -1.4, isEmpty: points.allSatisfy { $0.count == 0 }, emptyText: "No completed pins this week.") {
+        return chartCard(title: "SIGNALS CLEARED · 7 DAYS", isEmpty: points.allSatisfy { $0.count == 0 }, emptyText: "No cleared signals this week.") {
             Chart(points) { point in
                 BarMark(
                     x: .value("Day", point.label),
@@ -99,11 +179,11 @@ struct BoardStatsView: View {
                         if let intValue = value.as(Int.self) {
                             Text("\(intValue)")
                                 .font(.system(.caption2, design: .monospaced))
-                                .foregroundColor(Color.white.opacity(0.7))
+                                .foregroundColor(Palette.inkMuted)
                         } else if let doubleValue = value.as(Double.self) {
                             Text("\(Int(doubleValue.rounded()))")
                                 .font(.system(.caption2, design: .monospaced))
-                                .foregroundColor(Color.white.opacity(0.7))
+                                .foregroundColor(Palette.inkMuted)
                         }
                     }
                 }
@@ -111,7 +191,7 @@ struct BoardStatsView: View {
             .chartXAxis {
                 AxisMarks { _ in
                     AxisValueLabel()
-                        .foregroundStyle(Color.white.opacity(0.75))
+                        .foregroundStyle(Palette.inkMuted)
                         .font(.caption2.weight(.semibold))
                 }
             }
@@ -120,39 +200,9 @@ struct BoardStatsView: View {
         }
     }
 
-    private var categoryChart: some View {
-        let points = categoryPoints
-        return chartCard(title: "PINS BY CATEGORY", tilt: 1.2, isEmpty: points.allSatisfy { $0.count == 0 }, emptyText: "No pins to split by category.") {
-            Chart(points) { point in
-                BarMark(
-                    x: .value("Count", point.count),
-                    y: .value("Category", point.label)
-                )
-                .foregroundStyle(Palette.accent)
-                .cornerRadius(3)
-            }
-            .chartXAxis {
-                AxisMarks { _ in
-                    AxisValueLabel()
-                        .foregroundStyle(Color.white.opacity(0.75))
-                        .font(.caption2.weight(.semibold))
-                }
-            }
-            .chartYAxis {
-                AxisMarks { _ in
-                    AxisValueLabel()
-                        .foregroundStyle(Color.white.opacity(0.85))
-                        .font(.caption.weight(.semibold))
-                }
-            }
-            .chartXScale(domain: 0...yMax(points.map(\.count)))
-            .frame(height: CGFloat(max(120, points.count * 36)))
-        }
-    }
-
     private var pulseChart: some View {
         let points = pulsePoints
-        return chartCard(title: "FOCUS PULSES · 7 DAYS", tilt: 0, isEmpty: points.allSatisfy { $0.count == 0 }, emptyText: "No focus sessions this week.") {
+        return chartCard(title: "FOCUS CYCLES · 7 DAYS", isEmpty: points.allSatisfy { $0.count == 0 }, emptyText: "No focus cycles this week.") {
             Chart(points) { point in
                 LineMark(
                     x: .value("Day", point.label),
@@ -176,11 +226,11 @@ struct BoardStatsView: View {
                         if let intValue = value.as(Int.self) {
                             Text("\(intValue)")
                                 .font(.system(.caption2, design: .monospaced))
-                                .foregroundColor(Color.white.opacity(0.7))
+                                .foregroundColor(Palette.inkMuted)
                         } else if let doubleValue = value.as(Double.self) {
                             Text("\(Int(doubleValue.rounded()))")
                                 .font(.system(.caption2, design: .monospaced))
-                                .foregroundColor(Color.white.opacity(0.7))
+                                .foregroundColor(Palette.inkMuted)
                         }
                     }
                 }
@@ -188,7 +238,7 @@ struct BoardStatsView: View {
             .chartXAxis {
                 AxisMarks { _ in
                     AxisValueLabel()
-                        .foregroundStyle(Color.white.opacity(0.75))
+                        .foregroundStyle(Palette.inkMuted)
                         .font(.caption2.weight(.semibold))
                 }
             }
@@ -199,7 +249,7 @@ struct BoardStatsView: View {
 
     private var streakChart: some View {
         let points = streakPoints
-        return chartCard(title: "HABIT STREAKS", tilt: -1.1, isEmpty: points.isEmpty || points.allSatisfy { $0.count == 0 }, emptyText: "Pin a habit to track streak length.") {
+        return chartCard(title: "CADENCE STREAKS", isEmpty: points.isEmpty || points.allSatisfy { $0.count == 0 }, emptyText: "Add a cadence rhythm to track streak length.") {
             Chart(points) { point in
                 BarMark(
                     x: .value("Days", point.count),
@@ -217,14 +267,14 @@ struct BoardStatsView: View {
             .chartXAxis {
                 AxisMarks { _ in
                     AxisValueLabel()
-                        .foregroundStyle(Color.white.opacity(0.75))
+                        .foregroundStyle(Palette.inkMuted)
                         .font(.caption2.weight(.semibold))
                 }
             }
             .chartYAxis {
                 AxisMarks { _ in
                     AxisValueLabel()
-                        .foregroundStyle(Color.white.opacity(0.85))
+                        .foregroundStyle(Palette.inkSoft)
                         .font(.caption.weight(.semibold))
                 }
             }
@@ -235,7 +285,7 @@ struct BoardStatsView: View {
 
     private var interruptionChart: some View {
         let points = interruptionPoints
-        return chartCard(title: "INTERRUPTIONS · 7 DAYS", tilt: 1.6, isEmpty: points.allSatisfy { $0.count == 0 }, emptyText: "No interruption notes this week.") {
+        return chartCard(title: "TAGS · 7 DAYS", isEmpty: points.allSatisfy { $0.count == 0 }, emptyText: "No interruption tags this week.") {
             Chart(points) { point in
                 AreaMark(
                     x: .value("Day", point.label),
@@ -258,11 +308,11 @@ struct BoardStatsView: View {
                         if let intValue = value.as(Int.self) {
                             Text("\(intValue)")
                                 .font(.system(.caption2, design: .monospaced))
-                                .foregroundColor(Color.white.opacity(0.7))
+                                .foregroundColor(Palette.inkMuted)
                         } else if let doubleValue = value.as(Double.self) {
                             Text("\(Int(doubleValue.rounded()))")
                                 .font(.system(.caption2, design: .monospaced))
-                                .foregroundColor(Color.white.opacity(0.7))
+                                .foregroundColor(Palette.inkMuted)
                         }
                     }
                 }
@@ -270,7 +320,7 @@ struct BoardStatsView: View {
             .chartXAxis {
                 AxisMarks { _ in
                     AxisValueLabel()
-                        .foregroundStyle(Color.white.opacity(0.75))
+                        .foregroundStyle(Palette.inkMuted)
                         .font(.caption2.weight(.semibold))
                 }
             }
@@ -281,13 +331,12 @@ struct BoardStatsView: View {
 
     private func chartCard<Content: View>(
         title: String,
-        tilt: Double,
         isEmpty: Bool,
         emptyText: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
         let chart = content()
-        return StickyNote(tilt: tilt) {
+        return StickyNote {
             VStack(alignment: .leading, spacing: 12) {
                 Text(title)
                     .font(.caption.weight(.bold))
@@ -295,7 +344,7 @@ struct BoardStatsView: View {
                 if isEmpty {
                     Text(emptyText)
                         .font(.subheadline)
-                        .foregroundColor(Color.white.opacity(0.8))
+                        .foregroundColor(Palette.inkSoft)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 22)
                 } else {
@@ -326,15 +375,9 @@ struct BoardStatsView: View {
         }
     }
 
-    private var categoryPoints: [StatPoint] {
-        let completed = store.tasks.filter { $0.completedAt != nil }
-        let source = completed.isEmpty ? store.tasks : completed
-        return PinCategory.allCases.map { category in
-            StatPoint(
-                id: category.rawValue,
-                label: category.rawValue,
-                count: source.filter { $0.category == category }.count
-            )
+    private var kindPoints: [StatPoint] {
+        store.topInterruptKinds.map { kind, count in
+            StatPoint(id: kind.rawValue, label: kind.label, count: count)
         }
     }
 

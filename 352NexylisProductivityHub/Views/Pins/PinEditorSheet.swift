@@ -16,10 +16,10 @@ struct PinEditorSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    StickyNote(tilt: existing == nil ? -1.6 : 0) {
+                    StickyNote {
                         VStack(alignment: .leading, spacing: 12) {
                             labeledField("Title") {
-                                TextField("What needs a pin?", text: $title)
+                                TextField("What needs focus?", text: $title)
                                     .foregroundColor(Color.white)
                                     .submitLabel(.done)
                                     .onSubmit { BoardKeyboard.dismiss() }
